@@ -26,7 +26,10 @@ func NewClient(ctx context.Context,
 	mchID string,
 	mchCertificateSerialNumber string,
 	mchAPIv3Key string,
-	mchPrivateKey *rsa.PrivateKey) (*Client, error) {
+	mchPrivateKey *rsa.PrivateKey,
+	appId string,
+	callback string,
+) (*Client, error) {
 
 	// 使用商户私钥等初始化 client，并使它具有自动定时获取微信支付平台证书的能力
 	opts := []core.ClientOption{
@@ -52,6 +55,8 @@ func NewClient(ctx context.Context,
 		MchCertificateSerialNumber: mchCertificateSerialNumber,
 		MchAPIv3Key:                mchAPIv3Key,
 		MchPrivateKey:              mchPrivateKey,
+		AppID:                      appId,
+		Callback:                   callback,
 	}
 
 	return c, nil
