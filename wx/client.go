@@ -62,6 +62,7 @@ func NewClient(ctx context.Context,
 	return c, nil
 }
 
+// Pay 支付
 func (p *Client) Pay(amount int64, tradeNo, desc, payer string) (*rsp.WxPayPrepare, error) {
 	//	下单
 	svc2 := jsapi.JsapiApiService{Client: p.WxClient}
@@ -93,7 +94,7 @@ func (p *Client) Pay(amount int64, tradeNo, desc, payer string) (*rsp.WxPayPrepa
 	if result.Response.StatusCode != 200 {
 		log.Log().WithField("status", result.Response.StatusCode).
 			WithField("rsp", resp).WithField("result", result).
-			Info("call prepay failed result.Response.StatusCode is no ok")
+			Error("call prepay failed result.Response.StatusCode is no ok")
 		return nil, err
 	}
 	log.Log().WithField("status", result.Response.StatusCode).
@@ -109,4 +110,21 @@ func (p *Client) Pay(amount int64, tradeNo, desc, payer string) (*rsp.WxPayPrepa
 	response.Timestamp = *resp.TimeStamp
 	response.OrderID = tradeNo
 	return response, nil
+}
+
+// Close 关闭订单
+func (p *Client) Close(tradeNo string) (*core.APIResult, error) {
+	r := jsapi.CloseOrderRequest{
+		OutTradeNo: core.String(tradeNo),
+		Mchid:      core.String(p.MchID),
+	}
+
+	svc2 := jsapi.JsapiApiService{Client: p.WxClient}
+	res, err := svc2.CloseOrder(p.Ctx, r)
+	if err != nil {
+		log.Log().WithField("res", res).
+			Error("call prepay failed result.Response.StatusCode is no ok")
+		return res, err
+	}
+	return res, nil
 }
