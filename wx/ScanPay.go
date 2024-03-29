@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/xml"
 	"fmt"
 	"github.com/open4go/r2id"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -22,6 +23,39 @@ const (
 	MicroPayApi = "https://api.mch.weixin.qq.com/pay/micropay"
 )
 
+const xmlPayRequestParamsTemplate = `
+<xml>
+	<appid><![CDATA[%s]]></appid>
+	<auth_code><![CDATA[%s]]></auth_code>
+	<body><![CDATA[%s]]></body>
+	<mch_id><![CDATA[%s]]></mch_id>
+	<nonce_str><![CDATA[%s]]></nonce_str>
+	<out_trade_no><![CDATA[%s]]></out_trade_no>
+	<spbill_create_ip><![CDATA[%s]]></spbill_create_ip>
+	<total_fee><![CDATA[%d]]></total_fee>
+	<device_info>%s</device_info>
+	<sign_type>MD5</sign_type>
+	<sign>%s</sign>
+</xml>
+`
+
+// renderData 渲染支付参数
+func renderData(appid, code, body, mch, nonce, trade, ip, sign, device string, fee int64) string {
+	return fmt.Sprintf(
+		xmlPayRequestParamsTemplate,
+		appid,
+		code,
+		body,
+		mch,
+		nonce,
+		trade,
+		ip,
+		fee,
+		device,
+		sign,
+	)
+}
+
 // RequestParams 请求参数结构体
 type RequestParams struct {
 	AppID          string `xml:"appid,omitempty"`
@@ -34,7 +68,7 @@ type RequestParams struct {
 	Detail         string `xml:"detail,omitempty"`
 	Attach         string `xml:"attach,omitempty"`
 	OutTradeNo     string `xml:"out_trade_no,omitempty"`
-	TotalFee       int    `xml:"total_fee,omitempty"`
+	TotalFee       int64  `xml:"total_fee,omitempty"`
 	FeeType        string `xml:"fee_type,omitempty"`
 	SpbillCreateIP string `xml:"spbill_create_ip,omitempty"`
 	GoodsTag       string `xml:"goods_tag,omitempty"`
@@ -57,28 +91,27 @@ type SignStruct struct {
 	Detail         string `xml:"detail,omitempty"`
 	Attach         string `xml:"attach,omitempty"`
 	OutTradeNo     string `xml:"out_trade_no,omitempty"`
-	TotalFee       int    `xml:"total_fee,omitempty"`
+	TotalFee       int64  `xml:"total_fee,omitempty"`
 	SpbillCreateIP string `xml:"spbill_create_ip,omitempty"`
 	AuthCode       string `xml:"auth_code,omitempty"`
+	SignType       string `xml:"sign_type,omitempty"`
 }
 
 // GenerateSign 签名生成算法
 func GenerateSign(signStruct SignStruct, apiKey string) string {
 	var signSlice []string
 	signSlice = append(signSlice, fmt.Sprintf("appid=%s", signStruct.AppID))
-	//signSlice = append(signSlice, fmt.Sprintf("attach=%s", signStruct.Attach))
 	signSlice = append(signSlice, fmt.Sprintf("body=%s", signStruct.Body))
+	signSlice = append(signSlice, fmt.Sprintf("sign_type=%s", signStruct.SignType))
 	signSlice = append(signSlice, fmt.Sprintf("device_info=%s", signStruct.DeviceInfo))
 	signSlice = append(signSlice, fmt.Sprintf("mch_id=%s", signStruct.MchID))
 	signSlice = append(signSlice, fmt.Sprintf("nonce_str=%s", signStruct.NonceStr))
-	//signSlice = append(signSlice, fmt.Sprintf("out_trade_no=%s", signStruct.OutTradeNo))
-	//signSlice = append(signSlice, fmt.Sprintf("spbill_create_ip=%s", signStruct.SpbillCreateIP))
-	//signSlice = append(signSlice, fmt.Sprintf("total_fee=%d", signStruct.TotalFee))
-	//signSlice = append(signSlice, fmt.Sprintf("auth_code=%s", signStruct.AuthCode))
-	//sort.Strings(signSlice)
+	signSlice = append(signSlice, fmt.Sprintf("out_trade_no=%s", signStruct.OutTradeNo))
+	signSlice = append(signSlice, fmt.Sprintf("spbill_create_ip=%s", signStruct.SpbillCreateIP))
+	signSlice = append(signSlice, fmt.Sprintf("total_fee=%d", signStruct.TotalFee))
+	signSlice = append(signSlice, fmt.Sprintf("auth_code=%s", signStruct.AuthCode))
+	sort.Strings(signSlice)
 	signStr := strings.Join(signSlice, "&") + "&key=" + apiKey
-
-	fmt.Println("st-->", signStr)
 
 	// 默认签名类型为MD5
 	h := md5.New()
@@ -87,51 +120,62 @@ func GenerateSign(signStruct SignStruct, apiKey string) string {
 	return strings.ToUpper(sign)
 }
 
-// BuildRequestParams 构建请求参数
-func BuildRequestParams() RequestParams {
+type ScanPayClient struct {
+	AppId      string
+	MchID      string
+	APIKeyV2   string
+	DeviceInfo string
+}
+
+// buildRequestParams 构建请求参数
+func (sp *ScanPayClient) buildRequestParams(body, code string, fee int64) RequestParams {
 	return RequestParams{
-		// TODO 当前的appid是小程序的，有可能是导致签名错误的原因
-		AppID:          "wx265399cdd2753331",
-		MchID:          "1525274081",
-		DeviceInfo:     "macbook",
+		AppID:          sp.AppId,
+		MchID:          sp.MchID,
+		DeviceInfo:     sp.DeviceInfo,
 		NonceStr:       r2id.GenerateRandomString(32),
-		Body:           "image形象店-深圳腾大- QQ公仔",
+		Body:           body,
 		OutTradeNo:     r2id.GenerateOutTradeNo(),
-		TotalFee:       888,
+		TotalFee:       fee,
 		SpbillCreateIP: "8.8.8.8",
+		SignType:       "MD5",
 		// AuthCode 扫码枪读取的支付二维码
-		AuthCode: "132882375849305673",
+		AuthCode: code,
 	}
 }
 
 // SendRequest 发送请求
-func SendRequest(params RequestParams) error {
+func (sp *ScanPayClient) sendRequest(params RequestParams) error {
 	// 生成签名
 	signStruct := SignStruct{
-		AppID:          params.AppID,
-		MchID:          params.MchID,
-		DeviceInfo:     params.DeviceInfo,
-		NonceStr:       params.NonceStr,
-		Body:           params.Body,
-		Detail:         params.Detail,
+		AppID:      params.AppID,
+		MchID:      params.MchID,
+		DeviceInfo: params.DeviceInfo,
+		NonceStr:   params.NonceStr,
+		Body:       params.Body,
+		//Detail:         params.Detail,
 		Attach:         params.Attach,
 		OutTradeNo:     params.OutTradeNo,
 		TotalFee:       params.TotalFee,
 		SpbillCreateIP: params.SpbillCreateIP,
 		AuthCode:       params.AuthCode,
+		SignType:       params.SignType,
 	}
-	sign := GenerateSign(signStruct, "Huanglijiguiliuluosifen199409277")
+	sign := GenerateSign(signStruct, sp.APIKeyV2)
+	reqBody := renderData(
+		params.AppID,
+		params.AuthCode,
+		params.Body,
+		params.MchID,
+		params.NonceStr,
+		params.OutTradeNo,
+		params.SpbillCreateIP,
+		sign,
+		params.DeviceInfo,
+		params.TotalFee,
+	)
 
-	// 设置请求参数
-	params.Sign = sign
-	params.SignType = "MD5" // 默认签名类型为MD5
-
-	xmlBody, err := xml.Marshal(params)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("POST", MicroPayApi, bytes.NewBuffer(xmlBody))
+	req, err := http.NewRequest("POST", MicroPayApi, bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
 		return err
 	}
@@ -149,15 +193,26 @@ func SendRequest(params RequestParams) error {
 	if err != nil {
 		return err
 	}
-
-	fmt.Println("---->", string(body), err)
+	log.Infof("wx pay resp: %s", string(body))
 	return nil
 }
 
-func Demo() {
-	params := BuildRequestParams()
-	err := SendRequest(params)
+func (sp *ScanPayClient) Pay(body, code string, fee int64) error {
+
+	params := sp.buildRequestParams(body, code, fee)
+	err := sp.sendRequest(params)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Errorf("Error:%v", err)
+		return err
+	}
+	return nil
+}
+
+func NewScanPay(appID, mchID, apiKey, deviceInfo string) *ScanPayClient {
+	return &ScanPayClient{
+		appID,
+		mchID,
+		apiKey,
+		deviceInfo,
 	}
 }
