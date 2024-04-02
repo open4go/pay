@@ -169,7 +169,7 @@ func (sp *ScanPayClient) buildRequestParams(body, code string, fee int64) Reques
 }
 
 // SendRequest 发送请求
-func (sp *ScanPayClient) sendRequest(params RequestParams) error {
+func (sp *ScanPayClient) sendRequest(params RequestParams) (*PayResult, error) {
 	// 生成签名
 	signStruct := SignStruct{
 		AppID:      params.AppID,
@@ -201,7 +201,7 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) error {
 
 	req, err := http.NewRequest("POST", MicroPayApi, bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/xml")
@@ -209,38 +209,38 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	log.Infof("wx pay resp: %s", string(body))
+	log.Debugf("wx pay resp: %s", string(body))
 
 	// 解析返回的结构
-	var result PayResult
+	result := &PayResult{}
 	err = xml.Unmarshal(body, &result)
 	if err != nil {
-		log.Infof("Error decoding XML: %v\n", err)
-		return err
+		log.Errorf("Error decoding XML: %v\n", err)
+		return nil, err
 	}
 
-	log.Infof("Return Code: %s\n", result.ReturnCode)
-	log.Infof("Return Message: %s\n", result.ReturnMsg)
-	return nil
+	log.Debugf("Return Code: %s\n", result.ReturnCode)
+	log.Debugf("Return Message: %s\n", result.ReturnMsg)
+	return result, nil
 }
 
-func (sp *ScanPayClient) Pay(body, code string, fee int64) error {
+func (sp *ScanPayClient) Pay(body, code string, fee int64) (*PayResult, error) {
 
 	params := sp.buildRequestParams(body, code, fee)
-	err := sp.sendRequest(params)
+	res, err := sp.sendRequest(params)
 	if err != nil {
 		log.Errorf("Error:%v", err)
-		return err
+		return nil, err
 	}
-	return nil
+	return res, nil
 }
 
 func NewScanPay(appID, mchID, apiKey, deviceInfo string) *ScanPayClient {
