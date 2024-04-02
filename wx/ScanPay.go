@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/xml"
 	"fmt"
 	"github.com/open4go/r2id"
 	log "github.com/sirupsen/logrus"
@@ -95,6 +96,29 @@ type SignStruct struct {
 	SpbillCreateIP string `xml:"spbill_create_ip,omitempty"`
 	AuthCode       string `xml:"auth_code,omitempty"`
 	SignType       string `xml:"sign_type,omitempty"`
+}
+
+type PayResult struct {
+	XMLName       xml.Name `xml:"xml"`
+	ReturnCode    string   `xml:"return_code"`
+	ReturnMsg     string   `xml:"return_msg"`
+	AppID         string   `xml:"appid"`
+	MchID         string   `xml:"mch_id"`
+	DeviceInfo    string   `xml:"device_info"`
+	NonceStr      string   `xml:"nonce_str"`
+	Sign          string   `xml:"sign"`
+	ResultCode    string   `xml:"result_code"`
+	OpenID        string   `xml:"openid"`
+	IsSubscribe   string   `xml:"is_subscribe"`
+	TradeType     string   `xml:"trade_type"`
+	BankType      string   `xml:"bank_type"`
+	TotalFee      int      `xml:"total_fee"`
+	CouponFee     int      `xml:"coupon_fee"`
+	FeeType       string   `xml:"fee_type"`
+	TransactionID string   `xml:"transaction_id"`
+	OutTradeNo    string   `xml:"out_trade_no"`
+	Attach        string   `xml:"attach"`
+	TimeEnd       string   `xml:"time_end"`
 }
 
 // GenerateSign 签名生成算法
@@ -194,6 +218,17 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) error {
 		return err
 	}
 	log.Infof("wx pay resp: %s", string(body))
+
+	// 解析返回的结构
+	var result PayResult
+	err = xml.Unmarshal(body, &result)
+	if err != nil {
+		log.Infof("Error decoding XML: %v\n", err)
+		return err
+	}
+
+	log.Infof("Return Code: %s\n", result.ReturnCode)
+	log.Infof("Return Message: %s\n", result.ReturnMsg)
 	return nil
 }
 
