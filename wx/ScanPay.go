@@ -161,14 +161,29 @@ type QueryRequest struct {
 }
 
 type QueryResult struct {
-	XMLName    xml.Name `xml:"xml"`
-	AppID      string   `json:"appid"`                  // 公众账号ID
-	MchID      string   `json:"mch_id"`                 // 商户号
-	NonceStr   string   `json:"nonce_str"`              // 随机字符串
-	Sign       string   `json:"sign"`                   // 签名
-	ResultCode string   `json:"result_code"`            // 业务结果
-	ErrCode    string   `json:"err_code,omitempty"`     // 错误代码
-	ErrCodeDes string   `json:"err_code_des,omitempty"` // 错误代码描述
+	XMLName        xml.Name `xml:"xml"`
+	ReturnCode     string   `xml:"return_code"`
+	ReturnMsg      string   `xml:"return_msg"`
+	ResultCode     string   `xml:"result_code"`
+	MchID          string   `xml:"mch_id"`
+	AppID          string   `xml:"appid"`
+	OpenID         string   `xml:"openid"`
+	IsSubscribe    string   `xml:"is_subscribe"`
+	DeviceInfo     string   `xml:"device_info"`
+	TradeType      string   `xml:"trade_type"`
+	TradeState     string   `xml:"trade_state"`
+	BankType       string   `xml:"bank_type"`
+	TotalFee       int      `xml:"total_fee"`
+	FeeType        string   `xml:"fee_type"`
+	CashFee        int      `xml:"cash_fee"`
+	CashFeeType    string   `xml:"cash_fee_type"`
+	TransactionID  string   `xml:"transaction_id"`
+	OutTradeNo     string   `xml:"out_trade_no"`
+	Attach         string   `xml:"attach"`
+	TimeEnd        string   `xml:"time_end"`
+	TradeStateDesc string   `xml:"trade_state_desc"`
+	NonceStr       string   `xml:"nonce_str"`
+	Sign           string   `xml:"sign"`
 }
 
 // GeneratePaySign 支付签名生成算法
