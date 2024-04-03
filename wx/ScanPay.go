@@ -161,13 +161,14 @@ type QueryRequest struct {
 }
 
 type QueryResult struct {
-	AppID      string `json:"appid"`                  // 公众账号ID
-	MchID      string `json:"mch_id"`                 // 商户号
-	NonceStr   string `json:"nonce_str"`              // 随机字符串
-	Sign       string `json:"sign"`                   // 签名
-	ResultCode string `json:"result_code"`            // 业务结果
-	ErrCode    string `json:"err_code,omitempty"`     // 错误代码
-	ErrCodeDes string `json:"err_code_des,omitempty"` // 错误代码描述
+	XMLName    xml.Name `xml:"xml"`
+	AppID      string   `json:"appid"`                  // 公众账号ID
+	MchID      string   `json:"mch_id"`                 // 商户号
+	NonceStr   string   `json:"nonce_str"`              // 随机字符串
+	Sign       string   `json:"sign"`                   // 签名
+	ResultCode string   `json:"result_code"`            // 业务结果
+	ErrCode    string   `json:"err_code,omitempty"`     // 错误代码
+	ErrCodeDes string   `json:"err_code_des,omitempty"` // 错误代码描述
 }
 
 // GeneratePaySign 支付签名生成算法
