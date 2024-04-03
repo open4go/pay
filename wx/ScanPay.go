@@ -346,7 +346,7 @@ func (sp *ScanPayClient) sendQueryRequest(params QueryRequest) (*QueryResult, er
 
 	// 解析返回的结构
 	result := &QueryResult{}
-	err = xml.Unmarshal(body, result)
+	err = xml.Unmarshal(body, &result)
 	if err != nil {
 		log.Errorf("Error decoding XML: %v\n", err)
 		return nil, err
