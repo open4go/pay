@@ -21,7 +21,9 @@ import (
 // https://products.aspose.app/barcode/zh-hans/scanqr#/recognized
 
 const (
-	MicroPayApi = "https://api.mch.weixin.qq.com/pay/micropay"
+	DefaultWxHost = "https://api.mch.weixin.qq.com"
+	MicroPayApi   = "/pay/micropay"
+	MicroQueryApi = "/pay/orderquery"
 )
 
 const xmlPayRequestParamsTemplate = `
@@ -40,6 +42,18 @@ const xmlPayRequestParamsTemplate = `
 </xml>
 `
 
+const xmlQueryParamsTemplate = `
+<xml>
+	<appid><![CDATA[%s]]></appid>
+	<transaction_id><![CDATA[%s]]></transaction_id>
+	<mch_id><![CDATA[%s]]></mch_id>
+	<nonce_str><![CDATA[%s]]></nonce_str>
+	<out_trade_no><![CDATA[%s]]></out_trade_no>
+	<sign_type>MD5</sign_type>
+	<sign>%s</sign>
+</xml>
+`
+
 // renderData 渲染支付参数
 func renderData(appid, code, body, mch, nonce, trade, ip, sign, device string, fee int64) string {
 	return fmt.Sprintf(
@@ -53,6 +67,19 @@ func renderData(appid, code, body, mch, nonce, trade, ip, sign, device string, f
 		ip,
 		fee,
 		device,
+		sign,
+	)
+}
+
+// renderQueryData 渲染查单参数
+func renderQueryData(appid, transaction, mch, nonce, trade, sign string) string {
+	return fmt.Sprintf(
+		xmlQueryParamsTemplate,
+		appid,
+		transaction,
+		mch,
+		nonce,
+		trade,
 		sign,
 	)
 }
@@ -121,8 +148,30 @@ type PayResult struct {
 	TimeEnd       string   `xml:"time_end"`
 }
 
-// GenerateSign 签名生成算法
-func GenerateSign(signStruct SignStruct, apiKey string) string {
+// QueryRequest 查单
+type QueryRequest struct {
+	XMLName       xml.Name `xml:"xml"`
+	AppID         string   `json:"appid"`
+	MchID         string   `json:"mch_id"`
+	TransactionID string   `json:"transaction_id,omitempty"`
+	OutTradeNo    string   `json:"out_trade_no"`
+	NonceStr      string   `json:"nonce_str"`
+	Sign          string   `json:"sign"`
+	SignType      string   `json:"sign_type,omitempty"`
+}
+
+type QueryResult struct {
+	AppID      string `json:"appid"`                  // 公众账号ID
+	MchID      string `json:"mch_id"`                 // 商户号
+	NonceStr   string `json:"nonce_str"`              // 随机字符串
+	Sign       string `json:"sign"`                   // 签名
+	ResultCode string `json:"result_code"`            // 业务结果
+	ErrCode    string `json:"err_code,omitempty"`     // 错误代码
+	ErrCodeDes string `json:"err_code_des,omitempty"` // 错误代码描述
+}
+
+// GeneratePaySign 支付签名生成算法
+func GeneratePaySign(signStruct SignStruct, apiKey string) string {
 	var signSlice []string
 	signSlice = append(signSlice, fmt.Sprintf("appid=%s", signStruct.AppID))
 	signSlice = append(signSlice, fmt.Sprintf("body=%s", signStruct.Body))
@@ -134,6 +183,22 @@ func GenerateSign(signStruct SignStruct, apiKey string) string {
 	signSlice = append(signSlice, fmt.Sprintf("spbill_create_ip=%s", signStruct.SpbillCreateIP))
 	signSlice = append(signSlice, fmt.Sprintf("total_fee=%d", signStruct.TotalFee))
 	signSlice = append(signSlice, fmt.Sprintf("auth_code=%s", signStruct.AuthCode))
+	return signWithArrayParams(signSlice, apiKey)
+}
+
+// GenerateQuerySign 查单签名生成算法
+func GenerateQuerySign(signStruct QueryRequest, apiKey string) string {
+	var signSlice []string
+	signSlice = append(signSlice, fmt.Sprintf("appid=%s", signStruct.AppID))
+	signSlice = append(signSlice, fmt.Sprintf("transaction_id=%s", signStruct.TransactionID))
+	signSlice = append(signSlice, fmt.Sprintf("sign_type=%s", signStruct.SignType))
+	signSlice = append(signSlice, fmt.Sprintf("out_trade_no=%s", signStruct.OutTradeNo))
+	signSlice = append(signSlice, fmt.Sprintf("mch_id=%s", signStruct.MchID))
+	signSlice = append(signSlice, fmt.Sprintf("nonce_str=%s", signStruct.NonceStr))
+	return signWithArrayParams(signSlice, apiKey)
+}
+
+func signWithArrayParams(signSlice []string, apiKey string) string {
 	sort.Strings(signSlice)
 	signStr := strings.Join(signSlice, "&") + "&key=" + apiKey
 
@@ -151,8 +216,8 @@ type ScanPayClient struct {
 	DeviceInfo string
 }
 
-// buildRequestParams 构建请求参数
-func (sp *ScanPayClient) buildRequestParams(body, code string, fee int64) RequestParams {
+// makePayRequestParams 构建请求参数
+func (sp *ScanPayClient) makePayRequestParams(body, code string, fee int64) RequestParams {
 	return RequestParams{
 		AppID:          sp.AppId,
 		MchID:          sp.MchID,
@@ -168,8 +233,21 @@ func (sp *ScanPayClient) buildRequestParams(body, code string, fee int64) Reques
 	}
 }
 
-// SendRequest 发送请求
-func (sp *ScanPayClient) sendRequest(params RequestParams) (*PayResult, error) {
+// makePayRequestParams 构建请求参数
+func (sp *ScanPayClient) makeQueryRequestParams(transactionID, outTradeNo string) QueryRequest {
+	return QueryRequest{
+		AppID:      sp.AppId,
+		MchID:      sp.MchID,
+		NonceStr:   r2id.GenerateRandomString(32),
+		OutTradeNo: outTradeNo,
+		SignType:   "MD5",
+		// AuthCode 扫码枪读取的支付二维码
+		TransactionID: transactionID,
+	}
+}
+
+// sendPayRequest 发送支付请求
+func (sp *ScanPayClient) sendPayRequest(params RequestParams) (*PayResult, error) {
 	// 生成签名
 	signStruct := SignStruct{
 		AppID:      params.AppID,
@@ -185,7 +263,7 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) (*PayResult, error) {
 		AuthCode:       params.AuthCode,
 		SignType:       params.SignType,
 	}
-	sign := GenerateSign(signStruct, sp.APIKeyV2)
+	sign := GeneratePaySign(signStruct, sp.APIKeyV2)
 	reqBody := renderData(
 		params.AppID,
 		params.AuthCode,
@@ -199,7 +277,7 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) (*PayResult, error) {
 		params.TotalFee,
 	)
 
-	req, err := http.NewRequest("POST", MicroPayApi, bytes.NewBuffer([]byte(reqBody)))
+	req, err := http.NewRequest("POST", DefaultWxHost+MicroPayApi, bytes.NewBuffer([]byte(reqBody)))
 	if err != nil {
 		return nil, err
 	}
@@ -232,10 +310,66 @@ func (sp *ScanPayClient) sendRequest(params RequestParams) (*PayResult, error) {
 	return result, nil
 }
 
+// sendQueryRequest 发送查单请求
+func (sp *ScanPayClient) sendQueryRequest(params QueryRequest) (*QueryResult, error) {
+	// 生成签名
+	sign := GenerateQuerySign(params, sp.APIKeyV2)
+	reqBody := renderQueryData(
+		params.AppID,
+		params.TransactionID,
+		params.MchID,
+		params.NonceStr,
+		params.OutTradeNo,
+		sign,
+	)
+
+	req, err := http.NewRequest("POST", DefaultWxHost+MicroQueryApi, bytes.NewBuffer([]byte(reqBody)))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/xml")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("wx pay resp: %s", string(body))
+
+	// 解析返回的结构
+	result := &QueryResult{}
+	err = xml.Unmarshal(body, &result)
+	if err != nil {
+		log.Errorf("Error decoding XML: %v\n", err)
+		return nil, err
+	}
+
+	log.Debugf("ResultCode Code: %s\n", result.ResultCode)
+	return result, nil
+}
+
 func (sp *ScanPayClient) Pay(body, code string, fee int64) (*PayResult, error) {
 
-	params := sp.buildRequestParams(body, code, fee)
-	res, err := sp.sendRequest(params)
+	params := sp.makePayRequestParams(body, code, fee)
+	res, err := sp.sendPayRequest(params)
+	if err != nil {
+		log.Errorf("Error:%v", err)
+		return nil, err
+	}
+	return res, nil
+}
+
+func (sp *ScanPayClient) Query(trade, transaction string) (*QueryResult, error) {
+
+	params := sp.makeQueryRequestParams(transaction, trade)
+	res, err := sp.sendQueryRequest(params)
 	if err != nil {
 		log.Errorf("Error:%v", err)
 		return nil, err
