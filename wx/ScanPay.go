@@ -233,14 +233,14 @@ type ScanPayClient struct {
 }
 
 // makePayRequestParams 构建请求参数
-func (sp *ScanPayClient) makePayRequestParams(body, code string, fee int64) RequestParams {
+func (sp *ScanPayClient) makePayRequestParams(body, code string, fee int64, trade string) RequestParams {
 	return RequestParams{
 		AppID:          sp.AppId,
 		MchID:          sp.MchID,
 		DeviceInfo:     sp.DeviceInfo,
 		NonceStr:       r2id.GenerateRandomString(32),
 		Body:           body,
-		OutTradeNo:     r2id.GenerateOutTradeNo(),
+		OutTradeNo:     trade,
 		TotalFee:       fee,
 		SpbillCreateIP: "8.8.8.8",
 		SignType:       "MD5",
@@ -371,9 +371,9 @@ func (sp *ScanPayClient) sendQueryRequest(params QueryRequest) (*QueryResult, er
 	return result, nil
 }
 
-func (sp *ScanPayClient) Pay(body, code string, fee int64) (*PayResult, error) {
+func (sp *ScanPayClient) Pay(body, code string, fee int64, trade string) (*PayResult, error) {
 
-	params := sp.makePayRequestParams(body, code, fee)
+	params := sp.makePayRequestParams(body, code, fee, trade)
 	res, err := sp.sendPayRequest(params)
 	if err != nil {
 		log.Errorf("Error:%v", err)
