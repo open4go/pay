@@ -42,7 +42,7 @@ func NewClient(ctx context.Context,
 
 	client, err := core.NewClient(ctx, opts...)
 	if err != nil {
-		log.Log().WithField("mchID", mchID).
+		log.Log(ctx).WithField("mchID", mchID).
 			WithField("mchCertificateSerialNumber", mchCertificateSerialNumber).
 			WithField("mchAPIv3Key", mchAPIv3Key).Error(err)
 		return nil, err
@@ -85,19 +85,19 @@ func (p *Client) Pay(amount int64, tradeNo, desc, payer string) (*rsp.WxPayPrepa
 	)
 
 	if err != nil {
-		log.Log().WithField("status", result.Response.StatusCode).
+		log.Log(p.Ctx).WithField("status", result.Response.StatusCode).
 			WithField("rsp", resp).WithField("result", result).
 			Info("call prepay failed")
 		return nil, err
 	}
 
 	if result.Response.StatusCode != 200 {
-		log.Log().WithField("status", result.Response.StatusCode).
+		log.Log(p.Ctx).WithField("status", result.Response.StatusCode).
 			WithField("rsp", resp).WithField("result", result).
 			Error("call prepay failed result.Response.StatusCode is no ok")
 		return nil, err
 	}
-	log.Log().WithField("status", result.Response.StatusCode).
+	log.Log(p.Ctx).WithField("status", result.Response.StatusCode).
 		WithField("rsp", resp).WithField("callback_url", p.Callback).
 		Info("after prepay call")
 	response := &rsp.WxPayPrepare{}
@@ -122,7 +122,7 @@ func (p *Client) Close(tradeNo string) (*core.APIResult, error) {
 	svc2 := jsapi.JsapiApiService{Client: p.WxClient}
 	res, err := svc2.CloseOrder(p.Ctx, r)
 	if err != nil {
-		log.Log().WithField("res", res).
+		log.Log(p.Ctx).WithField("res", res).
 			Error("call prepay failed result.Response.StatusCode is no ok")
 		return res, err
 	}
