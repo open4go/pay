@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/open4go/r2id"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -305,9 +305,9 @@ func (sp *ScanPayClient) sendPayRequest(params RequestParams) (*PayResult, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -351,9 +351,9 @@ func (sp *ScanPayClient) sendQueryRequest(params QueryRequest) (*QueryResult, er
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
